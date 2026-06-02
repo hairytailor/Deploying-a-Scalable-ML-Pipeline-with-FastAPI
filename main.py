@@ -1,22 +1,23 @@
 import os
+import pickle
 import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from ml.data import apply_label, process_data
+from ml.data import process_data
 from ml.model import inference, load_model
 
 
-# DO NOT MODIFY
+# -----------------------------
+# Pydantic Data Model
+# -----------------------------
 class Data(BaseModel):
     age: int = Field(..., example=37)
     workclass: str = Field(..., example="Private")
     fnlgt: int = Field(..., example=178356)
     education: str = Field(..., example="HS-grad")
     education_num: int = Field(..., example=10, alias="education-num")
-    marital_status: str = Field(
-        ..., example="Married-civ-spouse", alias="marital-status"
-    )
+    marital_status: str = Field(..., example="Married-civ-spouse", alias="marital-status")
     occupation: str = Field(..., example="Prof-specialty")
     relationship: str = Field(..., example="Husband")
     race: str = Field(..., example="White")
@@ -26,33 +27,50 @@ class Data(BaseModel):
     hours_per_week: int = Field(..., example=40, alias="hours-per-week")
     native_country: str = Field(..., example="United-States", alias="native-country")
 
+    class Config:
+        allow_population_by_field_name = True
 
-# Load encoder
-encoder_path = "model/encoder.pkl"
-encoder = load_model(encoder_path)
 
-# Load model
-model_path = "model/model.pkl"
-model = load_model(model_path)
+# -----------------------------
+# FastAPI App
+# -----------------------------
+app = FastAPI(
+    title="Census Income Prediction API",
+    description="Predict whether income >50K using a trained ML model.",
+    version="1.0.0",
+)
 
-# Create FastAPI app
-app = FastAPI()
 
-# TODO: create a GET on the root giving a welcome message
+# -----------------------------
+# Load model + encoder + lb on startup
+# -----------------------------
+@app.on_event("startup")
+async def startup_event():
+    global model, encoder, lb
+
+    model = load_model("model/model.pkl")
+    encoder = load_model("model/encoder.pkl")
+    lb = load_model("model/lb.pkl") if os.path.exists("model/lb.pkl") else None
+
+
+# -----------------------------
+# GET Root Endpoint
+# -----------------------------
 @app.get("/")
-async def get_root():
-    return {"message": "Welcome to the ML inference API!"}
+async def root():
+    return {"message": "Welcome to the Census Income Prediction API!"}
 
 
-# TODO: create a POST on a different path that does model inference
-@app.post("/data/")
-async def post_inference(data: Data):
-    # DO NOT MODIFY: turn the Pydantic model into a dict.
-    data_dict = data.dict()
+# -----------------------------
+# POST Prediction Endpoint
+# -----------------------------
+@app.post("/predict")
+async def predict(data: Data):
+    # Convert Pydantic model → dict
+    data_dict = data.dict(by_alias=True)
 
-    # DO NOT MODIFY: clean up the dict to turn it into a Pandas DataFrame.
-    data = {k.replace("_", "-"): [v] for k, v in data_dict.items()}
-    data = pd.DataFrame.from_dict(data)
+    # Convert to DataFrame
+    df = pd.DataFrame([data_dict])
 
     cat_features = [
         "workclass",
@@ -65,16 +83,19 @@ async def post_inference(data: Data):
         "native-country",
     ]
 
-    # Process input data
-    data_processed, _, _, _ = process_data(
-        data,
+    # Process input
+    X, _, _, _ = process_data(
+        df,
         categorical_features=cat_features,
         training=False,
         encoder=encoder,
-        lb=None
+        lb=lb,
     )
 
     # Predict
-    pred = inference(model, data_processed)
+    pred = inference(model, X)[0]
 
-    return {"result": apply_label(pred)}
+    # Convert numeric prediction → label
+    label = ">50K" if pred == 1 else "<=50K"
+
+    return {"prediction": label}

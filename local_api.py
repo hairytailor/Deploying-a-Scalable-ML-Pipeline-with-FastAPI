@@ -1,17 +1,17 @@
 import json
-
 import requests
 
-# TODO: send a GET using the URL http://127.0.0.1:8000
-r = None # Your code here
-
-# TODO: print the status code
-# print()
-# TODO: print the welcome message
-# print()
-
+# -----------------------------
+# GET request to root endpoint
+# -----------------------------
+r = requests.get("http://127.0.0.1:8000/")
+print("GET / status:", r.status_code)
+print("GET / response:", r.json())
 
 
+# -----------------------------
+# Data for POST request
+# -----------------------------
 data = {
     "age": 37,
     "workclass": "Private",
@@ -29,10 +29,9 @@ data = {
     "native-country": "United-States",
 }
 
-# TODO: send a POST using the data above
-r = None # Your code here
-
-# TODO: print the status code
-# print()
-# TODO: print the result
-# print()
+# -----------------------------
+# POST request to /predict
+# -----------------------------
+r = requests.post("http://127.0.0.1:8000/predict", json=data)
+print("POST /predict status:", r.status_code)
+print("POST /predict response:", r.json())

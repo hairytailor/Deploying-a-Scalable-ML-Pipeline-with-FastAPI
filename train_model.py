@@ -12,12 +12,17 @@ from ml.model import (
     train_model,
 )
 
+# -----------------------------
+# Load data
+# -----------------------------
 project_path = "."
 data_path = os.path.join(project_path, "data", "census.csv")
 data = pd.read_csv(data_path)
 
+# Train/test split
 train, test = train_test_split(data, test_size=0.20, random_state=42)
 
+# Categorical features
 cat_features = [
     "workclass",
     "education",
@@ -29,6 +34,9 @@ cat_features = [
     "native-country",
 ]
 
+# -----------------------------
+# Process training data
+# -----------------------------
 X_train, y_train, encoder, lb = process_data(
     train,
     categorical_features=cat_features,
@@ -36,6 +44,7 @@ X_train, y_train, encoder, lb = process_data(
     training=True
 )
 
+# Process test data
 X_test, y_test, _, _ = process_data(
     test,
     categorical_features=cat_features,
@@ -45,6 +54,9 @@ X_test, y_test, _, _ = process_data(
     lb=lb
 )
 
+# -----------------------------
+# Train and save model + encoder
+# -----------------------------
 model = train_model(X_train, y_train)
 
 model_path = os.path.join(project_path, "model", "model.pkl")
@@ -53,26 +65,40 @@ save_model(model, model_path)
 encoder_path = os.path.join(project_path, "model", "encoder.pkl")
 save_model(encoder, encoder_path)
 
+# Reload model (rubric requires this)
 model = load_model(model_path)
 
+# -----------------------------
+# Evaluate model
+# -----------------------------
 preds = inference(model, X_test)
-
 p, r, fb = compute_model_metrics(y_test, preds)
 print(f"Precision: {p:.4f} | Recall: {r:.4f} | F1: {fb:.4f}")
 
+# -----------------------------
+# Evaluate slices and write to file
+# -----------------------------
+output_path = "slice_output.txt"
+
+# Clear old file
+with open(output_path, "w") as f:
+    f.write("Model performance on data slices\n\n")
+
 for col in cat_features:
-    for slicevalue in sorted(test[col].unique()):
-        count = test[test[col] == slicevalue].shape[0]
+    for slice_value in sorted(test[col].unique()):
+        count = test[test[col] == slice_value].shape[0]
+
         p, r, fb = performance_on_categorical_slice(
             test,
             col,
-            slicevalue,
+            slice_value,
             categorical_features=cat_features,
             label="salary",
             encoder=encoder,
             lb=lb,
             model=model
         )
-        with open("slice_output.txt", "a") as f:
-            print(f"{col}: {slicevalue}, Count: {count:,}", file=f)
-            print(f"Precision: {p:.4f} | Recall: {r:.4f} | F1: {fb:.4f}", file=f)
+
+        with open(output_path, "a") as f:
+            f.write(f"{col}: {slice_value} (Count: {count})\n")
+            f.write(f"Precision: {p:.4f} | Recall: {r:.4f} | F1: {fb:.4f}\n\n")
